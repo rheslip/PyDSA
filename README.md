@@ -18,7 +18,7 @@ Changelog:
 9-20-2015 - first release  
 
 TODO:  
--blows up with some combinations of FFT size, averaging and padding - looks like an array indexing bug
+-blows up with some combinations of FFT size, averaging and padding - looks like an array indexing bug  
 -there are a lot of spurs in the spectrum. May be possible to fix in software but I think this is a limitation of the scope itself  
 
 Also included is Rigol_view, a short Python script which grabs the sample buffer and shells to wfm_view to show the results. wfm_view shows the same spurs in the spectrum.  
