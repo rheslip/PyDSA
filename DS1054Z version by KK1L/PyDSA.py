@@ -1,5 +1,5 @@
 # SpectrumAnalyzer-v01a.py(w)  (09-12-2011)
-# For Python version 2.6 or 2.7
+# For Python version 3.9 (updated from 2.6 by KK1L)
 # With external module pyaudio (for Python version 2.6 or 2.7); NUMPY module (for used Python version)
 # Created by Onno Hoekstra (pa2ohh)
 #
@@ -8,9 +8,16 @@
 #
 # This version slightly has a modified Sweep() routine for the DS1054Z by Kerr Smith Jan 31 2016
 #
-# This version slightly modified for Python 3.9 by Ron Rossi Jan 17 2021
+# This version modified for Python 3.9 by Ron Rossi Jan 17 2021
 # pyvisa ".ask" is now ".query"
 # significantly updated how to wait for waveform to be acquired and display
+#
+# Jul 16 2021 KK1L
+#   Added Clear button to remove the waveforms
+#   Added toggle button to choose channel 1 or 2 from scope
+#   Got the averaging function working and made it do a running average across N bins with no (minimal) execution time hit
+#   On screen progress feedback for scope read, FFT, and display
+#   Warning trap when scope not triggered
 #
 import math
 import time
@@ -127,7 +134,7 @@ if NUMPYenabled == True:
 
 # =================================== Start widgets routines ========================================
 def Bnot():
-    print ("Routine not made yet")
+    print("Routine not made yet")
 
 def on_click(self, event):
         # Last click in absolute coordinates
@@ -563,16 +570,16 @@ def Sweep():   # Read samples and store the data into the arrays
             TRACESopened = 1
 
             try:
-# Rossi code to open first resource
+                # Rossi code to open first resource
                 rm = visa.ResourceManager()
                 instruments = rm.list_resources()
                 #print( res )
                 #scope = rm.open_resource( res[0] ) # !scope = rm.open_resource()
 
-# Get the USB device, e.g. 'USB0::0x1AB1::0x0588::DS1ED141904883'
+                # Get the USB device, e.g. 'USB0::0x1AB1::0x0588::DS1ED141904883'
                 #instruments = visa.get_instruments_list()
                 #print ( 'List of instruments ', instruments )
-                print ( 'Instrument 0 = ', instruments[0])
+                #print( 'Instrument 0 = ', instruments[0])
                 #VXI = filter(lambda x: 'TCPIP' in x, instruments)
                 #if len(VXI) != 1:
                 #    print ('Bad instrument list', instruments)
@@ -588,109 +595,138 @@ def Sweep():   # Read samples and store the data into the arrays
             UpdateScreen()            # UpdateScreen() call
 
 
-        # RUNstatus = 2: Reading audio data from soundcard
-        if (RUNstatus == 2):
-            #set up the scope to acquire with correct parms
-            scope.write(":STST:BEEP 0") #turn off scope sounds                 
-            #sample and data set from current scope setting
-            SAMPLErate = scope.query_ascii_values(':ACQ:SRAT?')[0] #do this second
-            try:
-                data_length = scope.query_ascii_values(':ACQ:MDEP?')[0]
-            except:
-                #if data_length == "AUTO":
-                scope.write(":ACQ:MDEP 6000000")
-            data_length = int(scope.query_ascii_values(':ACQ:MDEP?')[0])
-            print ('Data length from scope:', data_length, "Sample rate from scope:", SAMPLErate)
-            print ('Will sample with command:',":WAV:SOUR CHAN" + str(ChannelChoice))
-            scope.write(":WAV:SOUR CHAN" + str(ChannelChoice))
-            scope.write(":STOP")
-            scope.write(":TRIG:SWE SING") #set single trigger mode so STOP plus acquire time can be used to read wave from screen
-            #print("end of commands after STOP")
-            txt = "->Acquiring wave from scope"
-            x = X0L + 275
-            y = Y0T+GRH+32
-            IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="aquire_status")
-            root.update()       # update screen
+        # RUNstatus = 2: Reading data from scope
+        try:
+            if (RUNstatus == 2):
+                #set up the scope to acquire with correct parms
+                scope.write(":STST:BEEP 0") #turn off scope sounds                 
+                #sample and data set from current scope setting
+                SAMPLErate = scope.query_ascii_values(':ACQ:SRAT?')[0] #do this second
+                try:
+                    data_length = scope.query_ascii_values(':ACQ:MDEP?')[0]
+                except:
+                    #if data_length == "AUTO":
+                    scope.write(":ACQ:MDEP 6000000")
+                data_length = int(scope.query_ascii_values(':ACQ:MDEP?')[0])
+                #print('Data length from scope:', data_length, "Sample rate from scope:", SAMPLErate)
+                #print('Will sample with command:',":WAV:SOUR CHAN" + str(ChannelChoice))
+                scope.write(":WAV:SOUR CHAN" + str(ChannelChoice))
+                scope.write(":STOP")
+                scope.write(":TRIG:SWE SING") #set single trigger mode so STOP plus acquire time can be used to read wave from screen
+                #print("end of commands after STOP")
+                txt = "->Acquiring wave from scope"
+                x = X0L + 275
+                y = Y0T+GRH+32
+                IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="aquire_status")
+                root.update()       # update screen
 
-            #Force single trigger and wait for the waveform to fully capture
-            scope.write(':SING')
-            trigger_status = scope.query(":TRIG:STAT?")
-            print("1st char", trigger_status[0], "full status", trigger_status)
-            #if sample rate is 5Ms/sec or slower, then scope is slow and needs check for completion
-            #this is a pretty hokie solution!
-            if SAMPLErate <= 2000000:
-                # need to compare to first character only since there is some extra char at end of string
-                while trigger_status[0] != ("R" or "W" or "T"): #loop to wait to enter RUN state
+                #Force single trigger and wait for the waveform to fully capture
+                scope.write(':SING')
+                sleep(0.5) #give scope a chance to settle on a status
+                trigger_status = scope.query(":TRIG:STAT?")
+                #print("1st char", trigger_status[0], "full status", trigger_status)
+                #if sample rate is 5Ms/sec or slower, then scope is slow and needs check for completion
+                #this is a pretty hokie solution!
+                T1 = time.time() #log time to give warning to check scope trigger
+                if SAMPLErate <= 2000000:
+                    # need to compare to first character only since there is some extra char at end of string
+                    while trigger_status[0] != ("R" or "W" or "T"): #loop to wait to enter RUN state
+                        trigger_status = scope.query(":TRIG:STAT?") 
+                        sleep(0.1)
+                        #print("Wait for Run. 1st char", trigger_status[0], "full status", trigger_status)
+                        T2 = time.time()
+                        if T2 - T1 > 10:  #give screen warning and stop acquire
+                            Warning = TRUE
+                            txt = ">>> CHECK SCOPE TRIGGER! <<<"
+                            x = X0L + 275
+                            y = Y0T+GRH+32
+                            ca.delete("aquire_status")
+                            IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORred, tag="check_trigger")
+                            root.update()       # update screen
+                            sleep(10) #give some time for warning to show
+                            RUNstatus = 0 #set stop status
+                            ca.delete("check_trigger")
+                            dummyvariable = 1/0 #throw an error to exit to "except:"
+                while trigger_status[0] != "S": #loop to wait for STOP state (wave completly captured)
                     trigger_status = scope.query(":TRIG:STAT?") 
                     sleep(0.1)
-                    print("Wait for Run. 1st char", trigger_status[0], "full status", trigger_status)
-            while trigger_status[0] != "S": #loop to wait for STOP state (wave completly captured)
-                trigger_status = scope.query(":TRIG:STAT?") 
-                sleep(0.1)
-                print("Wait for Stop. 1st char", trigger_status[0], "full status", trigger_status)
-            #this grabs an array of bytes
-            #if larger than 250,000 then need to break up reads
-            scope.write(":WAV:MODE RAW")
-            scope.write(":WAV:FORM BYTE")
-            if data_length < 250000:
-                read_length = data_length
-            else:
-                read_length = 250000         
-            NumReads = int(data_length/read_length) #will leave some points unread if not even divide
-            reads = 0
-            signals = []
-            data_size = len(signals)
-            #print ( 'Cleared data size = ', data_size)
-            while reads < NumReads:
-                start_read = read_length * reads + 1 
-                stop_read = start_read + read_length - 1
-                scope.write(":WAV:STAR " + str(start_read))
-                scope.write(":WAV:STOP " + str(stop_read))
-                print("data length:", data_length,"start:", start_read, "stop:",stop_read, "read length:",read_length)
-                signals.extend(scope.query_binary_values(":WAV:DATA?", datatype='s', data_points=read_length))
-                reads = reads + 1
-                x = X0L+275
-                y = Y0T+GRH+48
-                IDtxt  = ca.delete ("read_status") #delete canvas object tag=read_status
-                root.update()       # update screen     
-                txt = "read " + str(stop_read) + " of " + str(data_length) + " bytes"
-                IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="read_status")
-                root.update()       # update screen                
-            data_size = len(signals)
-            print ( 'Final data size = ', data_size)
-            IDtxt  = ca.delete ("read_status")
-            root.update()       # update screen  
-            #print ( 'signals = ', signals )
+                    #print("Wait for Stop. 1st char", trigger_status[0], "full status", trigger_status)
+                    T2 = time.time()
+                    if T2 - T1 > 1:  #give screen warning and stop acquire
+                        Warning = TRUE
+                        txt = ">>> CHECK SCOPE TRIGGER! <<<"
+                        x = X0L + 275
+                        y = Y0T+GRH+32
+                        ca.delete("aquire_status")
+                        IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORred, tag="check_trigger")
+                        root.update()       # update screen
+                        sleep(5) #give some time for warning to show
+                        RUNstatus = 0 #set stop status
+                        ca.delete("check_trigger")
+                        dummyvariable = 1/0 #throw an error to exit to "except:"
+                #this grabs an array of bytes
+                #if larger than 250,000 then need to break up reads
+                scope.write(":WAV:MODE RAW")
+                scope.write(":WAV:FORM BYTE")
+                if data_length < 250000:
+                    read_length = data_length
+                else:
+                    read_length = 250000         
+                NumReads = int(data_length/read_length) #will leave some points unread if not even divide
+                reads = 0
+                signals = []
+                data_size = len(signals)
+                #print ( 'Cleared data size = ', data_size)
+                while reads < NumReads:
+                    start_read = read_length * reads + 1 
+                    stop_read = start_read + read_length - 1
+                    scope.write(":WAV:STAR " + str(start_read))
+                    scope.write(":WAV:STOP " + str(stop_read))
+                    #print("data length:", data_length,"start:", start_read, "stop:",stop_read, "read length:",read_length)
+                    signals.extend(scope.query_binary_values(":WAV:DATA?", datatype='s', data_points=read_length))
+                    reads = reads + 1
+                    x = X0L+275
+                    y = Y0T+GRH+48
+                    IDtxt  = ca.delete ("read_status") #delete canvas object tag=read_status
+                    root.update()       # update screen     
+                    txt = "read " + str(stop_read) + " of " + str(data_length) + " bytes"
+                    IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="read_status")
+                    root.update()       # update screen                
+                data_size = len(signals)
+                #print( 'Final data size = ', data_size)
+                IDtxt  = ca.delete ("read_status")
+                root.update()       # update screen  
+                #print ( 'signals = ', signals )
 
-            # convert data from (inverted) bytes to an array of scaled floats
-            # this magic from Matthew Mets
-            SIGNAL1 = array.array('i', signals)
-            #SIGNAL1 = numpy.frombuffer(signals, dtype=)
-            #print (SIGNAL1)
-            SIGNAL1 = numpy.multiply(SIGNAL1, -1) #invert with below
-            SIGNAL1 = numpy.add(SIGNAL1, 255) #invert with above
-            #SIGNAL1 = numpy.subtract(SIGNAL1, 130) #shift down 50%
-            SIGNAL1 = numpy.divide(SIGNAL1,127.0) #normalize and make float
-            #print (SIGNAL1)
+                # convert data from (inverted) bytes to an array of scaled floats
+                # this magic from Matthew Mets
+                SIGNAL1 = array.array('i', signals)
+                #SIGNAL1 = numpy.frombuffer(signals, dtype=)
+                #print (SIGNAL1)
+                SIGNAL1 = numpy.multiply(SIGNAL1, -1) #invert with below
+                SIGNAL1 = numpy.add(SIGNAL1, 255) #invert with above
+                #SIGNAL1 = numpy.subtract(SIGNAL1, 130) #shift down 50%
+                SIGNAL1 = numpy.divide(SIGNAL1,127.0) #normalize and make float
+                #print (SIGNAL1)
 
-            UpdateAll()  # Update Data, trace and screen
+                UpdateAll()  # Update Data, trace and screen
 
-            if SWEEPsingle == True:  # single sweep mode, sweep once then stop
-                SWEEPsingle = False
-                RUNstatus = 3
+                if SWEEPsingle == True:  # single sweep mode, sweep once then stop
+                    SWEEPsingle = False
+                    RUNstatus = 3
 
-            # RUNstatus = 3: Stop
-            # RUNstatus = 4: Stop and restart
-            #if (RUNstatus == 3) or (RUNstatus == 4):
-            #    scope.write(":KEY:FOR")
-            #    scope.close()
-            if RUNstatus == 3:
-                RUNstatus = 0   # Status is stopped
-            if RUNstatus == 4:
-                RUNstatus = 1   # Status is (re)start
-            UpdateScreen()          # UpdateScreen() call
-
-
+                # RUNstatus = 3: Stop
+                # RUNstatus = 4: Stop and restart
+                #if (RUNstatus == 3) or (RUNstatus == 4):
+                #    scope.write(":KEY:FOR")
+                #    scope.close()
+                if RUNstatus == 3:
+                    RUNstatus = 0   # Status is stopped
+                if RUNstatus == 4:
+                    RUNstatus = 1   # Status is (re)start
+                UpdateScreen()          # UpdateScreen() call
+        except:
+            pass #way to "clean" exit when there is some scope issue
         # Update tquerys and screens by TKinter
         root.update_idletasks()
         root.update()                                       # update screens
@@ -753,7 +789,7 @@ def DoFFT():            # Fast Fourier transformation
         fftexponent = fftexponent + 1
         #print("fftsamples: ", fftsamples)
     
-    print ("Buffersize:" + str(len(SIGNAL1)) + " FFTsize: " + str(fftsamples))
+    #print("Buffersize:" + str(len(SIGNAL1)) + " FFTsize: " + str(fftsamples))
     SAMPLEsize= fftsamples
 
     n = 0
@@ -834,7 +870,7 @@ def DoFFT():            # Fast Fourier transformation
 
     #print len(FFTmemory)
     T2 = time.time()
-    print ("FFT calc time: ",T2 - T1, "s") # For time measurement of FFT routine
+    #print("FFT calc time: ",T2 - T1, "s") # For time measurement of FFT routine
     T1 = time.time()
     IDtxt  = ca.delete ("fft_status")
     root.update()
@@ -881,7 +917,7 @@ def DoFFT():            # Fast Fourier transformation
     TRACEreset = False                                      # Trace reset done
 
     T2 = time.time()
-    print ("FFT smoothing time: ",T2 - T1, "s") # For time measurement of FFT routine
+    #print("FFT smoothing time: ",T2 - T1, "s") # For time measurement of FFT routine
 
 
 def MakeTrace():        # Update the grid and trace
@@ -913,7 +949,7 @@ def MakeTrace():        # Update the grid and trace
 
     # Set the TRACEsize variable
     TRACEsize = len(FFTresult)      # Set the trace length
-    print("FFTresult length: ", len(FFTresult))
+    #print("FFTresult length: ", len(FFTresult))
     if TRACEsize == 0:              # If no trace, skip rest of this routine
         return()
 
@@ -929,7 +965,7 @@ def MakeTrace():        # Update the grid and trace
     # Horizontal conversion factors (frequency Hz) and border limits
     Fpixel = float(STOPfrequency - STARTfrequency) / GRW    # Frequency step per screen pixel
     Fsample = float(SAMPLErate / 2) / (TRACEsize - 1)       # Frequency step per sample
-    print("FPixel: ", Fpixel,"FSample:", Fsample)
+    #print("FPixel: ", Fpixel,"FSample:", Fsample)
     T1line = []
     n = 0
     Slevel = 0.0            # Signal level
@@ -1325,7 +1361,6 @@ b.pack(side=RIGHT, padx=5, pady=5)
 
 # ================ Call main routine ===============================
 root.update()               # Activate updated screens
-#SELECTaudiodevice()
 UpdateScreen() # try this here to show screen
 Sweep()
 
