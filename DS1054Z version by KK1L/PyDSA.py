@@ -652,7 +652,7 @@ def Sweep():   # Read samples and store the data into the arrays
                     sleep(0.1)
                     #print("Wait for Stop. 1st char", trigger_status[0], "full status", trigger_status)
                     T2 = time.time()
-                    if T2 - T1 > 1:  #give screen warning and stop acquire
+                    if T2 - T1 > 10:  #give screen warning and stop acquire
                         Warning = TRUE
                         txt = ">>> CHECK SCOPE TRIGGER! <<<"
                         x = X0L + 275
@@ -660,7 +660,7 @@ def Sweep():   # Read samples and store the data into the arrays
                         ca.delete("aquire_status")
                         IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORred, tag="check_trigger")
                         root.update()       # update screen
-                        sleep(5) #give some time for warning to show
+                        sleep(10) #give some time for warning to show
                         RUNstatus = 0 #set stop status
                         ca.delete("check_trigger")
                         dummyvariable = 1/0 #throw an error to exit to "except:"
