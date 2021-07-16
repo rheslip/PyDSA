@@ -8,17 +8,22 @@
 #
 # This version slightly has a modified Sweep() routine for the DS1054Z by Kerr Smith Jan 31 2016
 #
+# This version slightly modified for Python 3.9 by Ron Rossi Jan 17 2021
+# pyvisa ".ask" is now ".query"
+# significantly updated how to wait for waveform to be acquired and display
+#
 import math
 import time
 import numpy
-import tkFont
+#import tkinter
+import tkinter.font as tkfont
 import sys
-import visa
+import pyvisa as visa
 from time import sleep
-from Tkinter import *
-from tkFileDialog import askopenfilename
-from tkSimpleDialog import askstring
-from tkMessageBox import *
+from tkinter import *
+from tkinter.simpledialog import *
+from tkinter.messagebox import *
+import array 
 
 
 NUMPYenabled = True         # If NUMPY installed, then the FFT calculations is 4x faster than the own FFT calculation
@@ -37,8 +42,8 @@ TRACEreset = True           # True for first new trace, reset max hold and avera
 SWEEPsingle = False         # flag to sweep once
 
 SAMPLErate = 1000000        # scope sample rate, read from scope when we read the buffer
-SAMPLEsize = 16384          # default sample size
-SAMPLEdepth = 0             # 0 normal, 1 long
+SAMPLEsize = 16384          # default sample size ROSSI - irrelevant now. Read from scope.
+ChannelChoice = 1             # 1 channel 1, 2 channel 2 ROSSI. Now used for channel selection
 UPDATEspeed = 1.1           # Update speed can be increased when problems if PC too slow, default 1.1
 ZEROpadding = 0             # ZEROpadding for signal interpolation between frequency samples (0=none)
 
@@ -47,8 +52,8 @@ DBdivindex = 5              # 20 dB/div as initial value
 
 DBlevel = 0                 # Reference level
 
-LONGfftsize = 262144        # FFT to do on long buffer. larger FFT takes more time
-fftsamples = 16384           # size of FFT we are using - recalculated in DoFFT()
+LONGfftsize = 262144        # FFT to do on long buffer. larger FFT takes more time ROSSI - No longer used.
+fftsamples = 16384           # size of FFT we are using - ROSSI - irrelevant now. Calculated from data read.
 
 # Colors that can be modified
 COLORframes = "#000080"     # Color = "#rrggbb" rr=red gg=green bb=blue, Hexadecimal values 00 - ff
@@ -73,7 +78,7 @@ Buttonwidth2 = 8
 
 # Initialisation of general variables
 STARTfrequency = 0.0        # Startfrequency
-STOPfrequency = 10000000.0     # Stopfrequency
+STOPfrequency = 30000000.0     # Stopfrequency
 
 SNenabled= False            # If Signal to Noise is enabled in the software
 CENTERsignalfreq = 1000     # Center signal frequency of signal bandwidth for S/N measurement
@@ -101,11 +106,11 @@ T2line = []                 # Trace line channel 2
 S1line = []                 # Line for start of signal band indication
 S2line = []                 # line for stop of signal band indication
 
-RUNstatus = 1               # 0 stopped, 1 start, 2 running, 3 stop now, 4 stop and restart
+RUNstatus = 0               # 0 stopped, 1 start, 2 running, 3 stop now, 4 stop and restart.
 STOREtrace = False          # Store and display trace
 FFTwindow = 4               # FFTwindow 0=None (rectangular B=1), 1=Cosine (B=1.24), 2=Triangular non-zero endpoints (B=1.33),
                             # 3=Hann (B=1.5), 4=Blackman (B=1.73), 5=Nuttall (B=2.02), 6=Flat top (B=3.77)
-SIGNALlevel = 0.0            # Level of audio input 0 to 1
+SIGNALlevel = 0.0            # Level of audio input 0 to 1 ROSSI Not used.
 
 Marker1x = 0                # marker pip 1 location
 Marker1y = 0
@@ -122,7 +127,7 @@ if NUMPYenabled == True:
 
 # =================================== Start widgets routines ========================================
 def Bnot():
-    print "Routine not made yet"
+    print ("Routine not made yet")
 
 def on_click(self, event):
         # Last click in absolute coordinates
@@ -145,7 +150,7 @@ def Bmarker2(event):
 
     Marker2x=event.x
     Marker2y=event.y
-    #print "button 2 clicked at", event.x, event.y
+    #print ("button 2 clicked at", event.x, event.y)
 
 def BNormalmode():
     global TRACEmode
@@ -177,7 +182,7 @@ def BAveragemode():
     TRACEmode = 3
 
 
-    s = askstring("Power averaging", "Value: " + str(TRACEaverage) + "x\n\nNew value:\n(1-n)")
+    s = askinteger("Power averaging", "Value: " + str(TRACEaverage) + "x\n\nNew value:\n(1-n)")
 
     if (s == None):         # If Cancel pressed, then None
         return()
@@ -206,20 +211,20 @@ def BFFTwindow():
     UpdateAll()          # Always Update
 
 
-def BSampledepth():
-    global SAMPLEdepth
+def BChannelChoice():
+    global ChannelChoice
     global RUNstatus
 
     if (RUNstatus != 0):
         showwarning("WARNING","Stop sweep first")
         return()
 
-    if SAMPLEdepth == 0:
-        SAMPLEdepth = 1
+    if ChannelChoice == 2:
+        ChannelChoice = 1
     else:
-        SAMPLEdepth = 0
-    if RUNstatus == 0:      # Update if stopped
-        UpdateScreen()
+        ChannelChoice = 2
+    #if RUNstatus == 0:      # Update if stopped
+    UpdateScreen()
 
 
 def BSTOREtrace():
@@ -244,6 +249,7 @@ def BSINGLEsweep():
     else:
         SWEEPsingle = True
         RUNstatus = 1       # we are stopped, start
+        TRACEreset = True    # Reset trace peak and trace average
     UpdateScreen()          # Always Update
 
 def BSNmode():
@@ -459,6 +465,13 @@ def BStartfrequency():
     if RUNstatus == 0:      # Update if stopped
         UpdateTrace()
 
+def BClearTraces():
+    global T1line
+    global T2line
+    T1line = []
+    T2line = []
+    STOREtrace = False
+    UpdateScreen()
 
 def BStopfrequency():
     global STARTfrequency
@@ -529,7 +542,7 @@ def Sweep():   # Read samples and store the data into the arrays
     global SMPfftindex
     global SAMPLErate
     global SAMPLEsize
-    global SAMPLEdepth
+    global ChannelChoice
     global UPDATEspeed
     global STARTfrequency
     global STOPfrequency
@@ -541,7 +554,7 @@ def Sweep():   # Read samples and store the data into the arrays
 
     while (True):                                           # Main loop
 
-
+        #print("Runstatus: ", RUNstatus)
         # RUNstatus = 1 : Open Stream
         if (RUNstatus == 1):
             if UPDATEspeed < 1:
@@ -550,120 +563,135 @@ def Sweep():   # Read samples and store the data into the arrays
             TRACESopened = 1
 
             try:
-# Get the USB device, e.g. 'USB0::0x1AB1::0x0588::DS1ED141904883'
-                instruments = visa.get_instruments_list()
-                usb = filter(lambda x: 'USB' in x, instruments)
-                if len(usb) != 1:
-                    print 'Bad instrument list', instruments
-                    sys.exit(-1)
-                scope = visa.instrument(usb[0], timeout=20, chunk_size=1024000) # bigger timeout for long mem
+# Rossi code to open first resource
+                rm = visa.ResourceManager()
+                instruments = rm.list_resources()
+                #print( res )
+                #scope = rm.open_resource( res[0] ) # !scope = rm.open_resource()
 
+# Get the USB device, e.g. 'USB0::0x1AB1::0x0588::DS1ED141904883'
+                #instruments = visa.get_instruments_list()
+                #print ( 'List of instruments ', instruments )
+                print ( 'Instrument 0 = ', instruments[0])
+                #VXI = filter(lambda x: 'TCPIP' in x, instruments)
+                #if len(VXI) != 1:
+                #    print ('Bad instrument list', instruments)
+                #    sys.exit(-1)
+                #print ( 'TCPIP variable = ', VXI )
+                #scope = visa.instrument(VXI[0], timeout=200, chunk_size=1024000) # bigger timeout for long mem
+                scope = rm.open_resource( instruments[0] )
                 RUNstatus = 2
-            except:                                         # If error in opening audio stream, show error
+            except:
                 RUNstatus = 0
-                #txt = "Sample rate: " + str(SAMPLErate) + ", try a lower sample rate.\nOr another audio device."
                 showerror("VISA Error","Cannot open scope")
 
-# get metadata
-            #sample_rate = float(scope.ask(':ACQ:SAMP?'))
-            #timescale = float(scope.ask(":TIM:SCAL?"))
-            #timeoffset = float(scope.ask(":TIM:OFFS?"))
-            #voltscale = float(scope.ask(':CHAN1:SCAL?'))
-            #voltoffset = float(scope.ask(":CHAN1:OFFS?"))
-
-            UpdateScreen()                                  # UpdateScreen() call
+            UpdateScreen()            # UpdateScreen() call
 
 
         # RUNstatus = 2: Reading audio data from soundcard
         if (RUNstatus == 2):
-        # Grab the raw data from channel 1
-            #try:
-# Set the scope the way we want it
-            if SAMPLEdepth == 0:
-                scope.write(':ACQ:MDEP 12000') # normal memory type
-            else:
-                scope.write(':ACQ:MDEP 120000') # long memory type
-            #scope.write(':CHAN1:COUP DC') # DC coupling
-            #scope.write(':CHAN1:DISP ON') # Channel 1 on
-            #scope.write(':CHAN2:DISP ON') # Channel 2 off
-            #scope.write(':CHAN1:SCAL 1') # Channel 1 vertical scale 1 volts
-            #scope.write(':CHAN1:OFFS -2') # Channel 1 vertical offset 2 volts
-            #scope.write(':TIM:SCAL 0.001') # time interval
-            #scope.write(':TIM:OFFS .05') # Offset time 50 ms
-
-            #scope.write(':TRIG:EDGE:SOUR CHAN1') # Edge-trigger from channel 1
-            #scope.write(':TRIG:EDGE:SWE SING') # Single trigger
-            #scope.write(':TRIG:EDGE:COUP AC') # trigger coupling
-            #scope.write(':TRIG:EDGE:SLOP NEG') # Trigger on negative edge
-            #scope.write(':TRIG:EDGE:LEV 0.01') # Trigger  volts
-            scope.write(":RUN")
-
-            #txt = "Trig"
-            #x = X0L + 250
-            #y = Y0T+GRH+32
-            #IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORyellow)
-            #root.update()       # update screen
-
-           # while scope.ask(':TRIG:STAT?') != 'STOP':
-               # sleep(0.1)
-            #sleep(0.1)
-    # Grab the raw data from channel 1, which will take a few seconds for long buffer mode
-           # sleep(0.1)
+            #set up the scope to acquire with correct parms
+            scope.write(":STST:BEEP 0") #turn off scope sounds                 
+            #sample and data set from current scope setting
+            SAMPLErate = scope.query_ascii_values(':ACQ:SRAT?')[0] #do this second
+            try:
+                data_length = scope.query_ascii_values(':ACQ:MDEP?')[0]
+            except:
+                #if data_length == "AUTO":
+                scope.write(":ACQ:MDEP 6000000")
+            data_length = int(scope.query_ascii_values(':ACQ:MDEP?')[0])
+            print ('Data length from scope:', data_length, "Sample rate from scope:", SAMPLErate)
+            print ('Will sample with command:',":WAV:SOUR CHAN" + str(ChannelChoice))
+            scope.write(":WAV:SOUR CHAN" + str(ChannelChoice))
             scope.write(":STOP")
-            scope.write(":WAV:SOUR CHAN1")
-            scope.write(":WAV:MODE RAW")
-            scope.write(":WAV:FORM BYTE")
-            scope.write(":WAV:STAR 1")
-            if SAMPLEdepth == 0:
-                scope.write(":WAV:STOP 12000")
-            else:
-                scope.write(":WAV:STOP 120000")
-
-            txt = "->Acquire"
+            scope.write(":TRIG:SWE SING") #set single trigger mode so STOP plus acquire time can be used to read wave from screen
+            #print("end of commands after STOP")
+            txt = "->Acquiring wave from scope"
             x = X0L + 275
             y = Y0T+GRH+32
-            IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen)
+            IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="aquire_status")
             root.update()       # update screen
 
-
-            signals= scope.ask(":WAV:DATA?")  #do this first
+            #Force single trigger and wait for the waveform to fully capture
+            scope.write(':SING')
+            trigger_status = scope.query(":TRIG:STAT?")
+            print("1st char", trigger_status[0], "full status", trigger_status)
+            #if sample rate is 5Ms/sec or slower, then scope is slow and needs check for completion
+            #this is a pretty hokie solution!
+            if SAMPLErate <= 2000000:
+                # need to compare to first character only since there is some extra char at end of string
+                while trigger_status[0] != ("R" or "W" or "T"): #loop to wait to enter RUN state
+                    trigger_status = scope.query(":TRIG:STAT?") 
+                    sleep(0.1)
+                    print("Wait for Run. 1st char", trigger_status[0], "full status", trigger_status)
+            while trigger_status[0] != "S": #loop to wait for STOP state (wave completly captured)
+                trigger_status = scope.query(":TRIG:STAT?") 
+                sleep(0.1)
+                print("Wait for Stop. 1st char", trigger_status[0], "full status", trigger_status)
+            #this grabs an array of bytes
+            #if larger than 250,000 then need to break up reads
+            scope.write(":WAV:MODE RAW")
+            scope.write(":WAV:FORM BYTE")
+            if data_length < 250000:
+                read_length = data_length
+            else:
+                read_length = 250000         
+            NumReads = int(data_length/read_length) #will leave some points unread if not even divide
+            reads = 0
+            signals = []
             data_size = len(signals)
+            #print ( 'Cleared data size = ', data_size)
+            while reads < NumReads:
+                start_read = read_length * reads + 1 
+                stop_read = start_read + read_length - 1
+                scope.write(":WAV:STAR " + str(start_read))
+                scope.write(":WAV:STOP " + str(stop_read))
+                print("data length:", data_length,"start:", start_read, "stop:",stop_read, "read length:",read_length)
+                signals.extend(scope.query_binary_values(":WAV:DATA?", datatype='s', data_points=read_length))
+                reads = reads + 1
+                x = X0L+275
+                y = Y0T+GRH+48
+                IDtxt  = ca.delete ("read_status") #delete canvas object tag=read_status
+                root.update()       # update screen     
+                txt = "read " + str(stop_read) + " of " + str(data_length) + " bytes"
+                IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="read_status")
+                root.update()       # update screen                
+            data_size = len(signals)
+            print ( 'Final data size = ', data_size)
+            IDtxt  = ca.delete ("read_status")
+            root.update()       # update screen  
+            #print ( 'signals = ', signals )
 
-            SAMPLErate = scope.ask_for_values(':ACQ:SRAT?')[0] #do this second
-            #print 'Data size:', SAMPLEsize, "Sample rate:", SAMPLErate
+            # convert data from (inverted) bytes to an array of scaled floats
+            # this magic from Matthew Mets
+            SIGNAL1 = array.array('i', signals)
+            #SIGNAL1 = numpy.frombuffer(signals, dtype=)
+            #print (SIGNAL1)
+            SIGNAL1 = numpy.multiply(SIGNAL1, -1) #invert with below
+            SIGNAL1 = numpy.add(SIGNAL1, 255) #invert with above
+            #SIGNAL1 = numpy.subtract(SIGNAL1, 130) #shift down 50%
+            SIGNAL1 = numpy.divide(SIGNAL1,127.0) #normalize and make float
+            #print (SIGNAL1)
 
-
-
-            # sleep(0.1)
-
-# convert data from (inverted) bytes to an array of scaled floats
-# this magic from Matthew Mets
-            SIGNAL1 = numpy.frombuffer(signals, 'B')
-            #print SIGNAL1
-            SIGNAL1 = (SIGNAL1 * -1 + 255) -130  # invert
-            #print SIGNAL1
-            SIGNAL1 = SIGNAL1/127.0 # scale 10 +-1, has a slight DC offset
-            #print SIGNAL1
-
-            UpdateAll()                                     # Update Data, trace and screen
+            UpdateAll()  # Update Data, trace and screen
 
             if SWEEPsingle == True:  # single sweep mode, sweep once then stop
                 SWEEPsingle = False
                 RUNstatus = 3
 
-        # RUNstatus = 3: Stop
-        # RUNstatus = 4: Stop and restart
-        if (RUNstatus == 3) or (RUNstatus == 4):
-            scope.write(":KEY:FOR")
-            scope.close()
+            # RUNstatus = 3: Stop
+            # RUNstatus = 4: Stop and restart
+            #if (RUNstatus == 3) or (RUNstatus == 4):
+            #    scope.write(":KEY:FOR")
+            #    scope.close()
             if RUNstatus == 3:
-                RUNstatus = 0                               # Status is stopped
+                RUNstatus = 0   # Status is stopped
             if RUNstatus == 4:
-                RUNstatus = 1                               # Status is (re)start
-            UpdateScreen()                                  # UpdateScreen() call
+                RUNstatus = 1   # Status is (re)start
+            UpdateScreen()          # UpdateScreen() call
 
 
-        # Update tasks and screens by TKinter
+        # Update tquerys and screens by TKinter
         root.update_idletasks()
         root.update()                                       # update screens
 
@@ -702,10 +730,11 @@ def DoFFT():            # Fast Fourier transformation
 
 #show what we are doing on the screen
 # FFT can take a long time!
-    txt = "->FFT"
-    x = X0L + 333
+    IDtxt  = ca.delete ("aquire_status")
+    txt = "->Processing FFT"
+    x = X0L + 275
     y = Y0T+GRH+32
-    IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORred)
+    IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="fft_status")
     root.update()       # update screen
 
     T1 = time.time()                        # For time measurement of FFT routine
@@ -714,17 +743,17 @@ def DoFFT():            # Fast Fourier transformation
     IMX = []
 
 
-
-    # No FFT if empty or too short array of audio samples
-    if len(SIGNAL1) >= 1048576: # ensure only valid buffer sizes
-        fftsamples = LONGfftsize # can set this to be less than buffer size to make it faster
-    elif len(SIGNAL1) >= 16384: # ensure only valid buffer sizes
-        fftsamples = 16384
-    elif len(SIGNAL1) >= 8192: # ensure only valid buffer sizes
-        fftsamples = 8192
-    else:
-        return  # not a valid buffer size
-    #print "Buffersize:" + str(len(SIGNAL1)) + " FFTsize: " + str(fftsamples)
+    #scale fftsamples to scope sample size
+    fftexponent = 0
+    data_size = len(SIGNAL1)
+    for fftexponent in range(13,24):
+        fftsamples = 2**fftexponent
+        if fftsamples*2 >= data_size: #check to see if one more take it above
+            break
+        fftexponent = fftexponent + 1
+        #print("fftsamples: ", fftsamples)
+    
+    print ("Buffersize:" + str(len(SIGNAL1)) + " FFTsize: " + str(fftsamples))
     SAMPLEsize= fftsamples
 
     n = 0
@@ -735,7 +764,7 @@ def DoFFT():            # Fast Fourier transformation
 
         v=SIGNAL1[n]
         # Check for overload
-        va = abs(v)                         # Check for too high audio input level
+        va = abs(v)                         # Check for too high input level
         #print v
         if va > SIGNALlevel:
             SIGNALlevel = va
@@ -804,6 +833,16 @@ def DoFFT():            # Fast Fourier transformation
     FFTresult = []
 
     #print len(FFTmemory)
+    T2 = time.time()
+    print ("FFT calc time: ",T2 - T1, "s") # For time measurement of FFT routine
+    T1 = time.time()
+    IDtxt  = ca.delete ("fft_status")
+    root.update()
+    txt = "->Creating waveform"
+    x = X0L + 275
+    y = Y0T+GRH+32
+    IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="waveform_status")
+    root.update()
 
     n = 0
     while (n <= fftsamples / 2):
@@ -812,23 +851,37 @@ def DoFFT():            # Fast Fourier transformation
         v = v * Totalcorr                                   # Make level independent of samples and convert to display range
 
         if TRACEmode == 1:                                  # Normal mode, do not change v
-            pass
+            FFTresult.append(v)    # Append the value to the FFTresult array
+            n = n + 1         
 
-        if TRACEmode == 2 and TRACEreset == False:          # Max hold, change v to maximum value
+        if TRACEmode == 2: # and TRACEreset == True:          # Max hold, change v to maximum value
             if v < FFTmemory[n]:
                 v = FFTmemory[n]
+            FFTresult.append(v)    # Append the value to the FFTresult array
+            n = n + 1   
 
-        if TRACEmode == 3 and TRACEreset == False:          # Average, add difference / TRACEaverage to v
-            v = FFTmemory[n] + (v - FFTmemory[n]) / TRACEaverage
+        if TRACEmode == 3: # and TRACEreset == True:          # Average, add difference / TRACEaverage to v
+            #v = FFTmemory[n] + (v - FFTmemory[n]) / TRACEaverage
+            #trying a rolling average across TraceAverage values
+            i_fft = n
+            v_avg = 0
+            while ((i_fft - n) < TRACEaverage):
+                v_avg = v_avg + ((REX[i_fft] * REX[i_fft] + IMX[i_fft] * IMX[i_fft]) * Totalcorr)
+                i_fft = i_fft + 1
+            v = v_avg / TRACEaverage
+            
 
-        FFTresult.append(v)                                 # Append the value to the FFTresult array
-
-        n = n + 1
+            i_fft = n
+            v_avg = 0
+            while ((i_fft - n) < TRACEaverage):
+                FFTresult.append(v)    # Append the value to the FFTresult array
+                i_fft = i_fft + 1
+            n = n + TRACEaverage
 
     TRACEreset = False                                      # Trace reset done
 
     T2 = time.time()
-    # print (T2 - T1)                                         # For time measurement of FFT routine
+    print ("FFT smoothing time: ",T2 - T1, "s") # For time measurement of FFT routine
 
 
 def MakeTrace():        # Update the grid and trace
@@ -860,7 +913,7 @@ def MakeTrace():        # Update the grid and trace
 
     # Set the TRACEsize variable
     TRACEsize = len(FFTresult)      # Set the trace length
-
+    print("FFTresult length: ", len(FFTresult))
     if TRACEsize == 0:              # If no trace, skip rest of this routine
         return()
 
@@ -876,7 +929,7 @@ def MakeTrace():        # Update the grid and trace
     # Horizontal conversion factors (frequency Hz) and border limits
     Fpixel = float(STOPfrequency - STARTfrequency) / GRW    # Frequency step per screen pixel
     Fsample = float(SAMPLErate / 2) / (TRACEsize - 1)       # Frequency step per sample
-
+    print("FPixel: ", Fpixel,"FSample:", Fsample)
     T1line = []
     n = 0
     Slevel = 0.0            # Signal level
@@ -903,14 +956,13 @@ def MakeTrace():        # Update the grid and trace
 
         if SNenabled == True and (F >= STARTsignalfreq and F <= STOPsignalfreq):                # Add to signal if inside signal band
             Slevel = Slevel + float(FFTresult[n])
-
+        #print("FPixel: ", Fpixel,"FSample:", Fsample, "X: ", x, "Y: ",y)
         n = n + 1
 
     try:
         SNresult = 10 * math.log10(Slevel / Nlevel)
     except:
         SNresult = -999
-
 
     # Make the SIGNAL band lines
     S1line = []
@@ -947,7 +999,7 @@ def MakeScreen():       # Update the screen with traces and text
     global STOREtrace
     global Vdiv         # Number of vertical divisions
     global RUNstatus    # 0 stopped, 1 start, 2 running, 3 stop now, 4 stop and restart
-    global SAMPLEdepth  # 0 norm, 1 long
+    global ChannelChoice  # 1 or 2
     global UPDATEspeed
     global STARTfrequency
     global STOPfrequency
@@ -1017,7 +1069,6 @@ def MakeScreen():       # Update the screen with traces and text
         idTXT = ca.create_text (x-10, y2+10, text=txt, anchor=W, fill=COLORtext)
         freq=freq+freqstep
         i = i + 1
-
 
     # Draw traces
     if len(T1line) > 4:                                     # Avoid writing lines with 1 coordinate
@@ -1090,7 +1141,7 @@ def MakeScreen():       # Update the screen with traces and text
     idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
 
 
-    # Soundcard level bargraph
+    # Soundcard level bargraph  ROSSI Useless for scope FFT
     txt1 = "||||||||||||||||||||"   # Bargraph
     le = len(txt1)                  # length of bargraph
 
@@ -1114,17 +1165,15 @@ def MakeScreen():       # Update the screen with traces and text
 
 
     # Runstatus and level information
-    if (SAMPLEdepth == 1):
-        txt = "LONG"
+    if (ChannelChoice == 1):
+        txt = "Channel 1"
     else:
-        txt = "NORM"
+        txt = "Channel 2"
 
     if (RUNstatus == 0) or (RUNstatus == 3):
         txt = txt + " Sweep stopped"
     else:
         txt = txt + " Sweep running"
-
-
 
     x = X0L + 100
     y = Y0T+GRH+32
@@ -1178,7 +1227,7 @@ def MakeScreen():       # Update the screen with traces and text
 # ================ Make Screen ==========================
 
 root=Tk()
-root.title("Rigol Spectrum Analyzer V1.0 09-19-2015 VE3MKC")
+root.title("Rigol Spectrum Analyzer V1.5 01-20-2021 KK1L")
 
 root.minsize(100, 100)
 
@@ -1239,7 +1288,9 @@ b.pack(side=LEFT, padx=5, pady=5)
 b = Button(frame3, text="Stop", width=Buttonwidth2, command=BStop)
 b.pack(side=LEFT, padx=5, pady=5)
 
-b = Button(frame3, text="NORM/LONG", width=Buttonwidth1, command=BSampledepth)
+
+
+b = Button(frame3, text="Channel", width=Buttonwidth1, command=BChannelChoice)
 b.pack(side=LEFT, padx=5, pady=5)
 
 b = Button(frame3, text="Single", width=Buttonwidth1, command=BSINGLEsweep)
@@ -1249,6 +1300,9 @@ b = Button(frame3, text="Startfreq", width=Buttonwidth2, command=BStartfrequency
 b.pack(side=LEFT, padx=5, pady=5)
 
 b = Button(frame3, text="Stopfreq", width=Buttonwidth2, command=BStopfrequency)
+b.pack(side=LEFT, padx=5, pady=5)
+
+b = Button(frame3, text="Clear", width=Buttonwidth2, command=BClearTraces)
 b.pack(side=LEFT, padx=5, pady=5)
 
 b = Button(frame3, text="+dB/div", width=Buttonwidth2, command=BDBdiv2)
@@ -1272,6 +1326,7 @@ b.pack(side=RIGHT, padx=5, pady=5)
 # ================ Call main routine ===============================
 root.update()               # Activate updated screens
 #SELECTaudiodevice()
+UpdateScreen() # try this here to show screen
 Sweep()
 
 
