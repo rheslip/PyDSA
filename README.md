@@ -1,5 +1,5 @@
 Updated version using Python 3.9 and latest PyVisa and NumPy
-The code is updated for more with more function and robust interaction with the scope.
+The code is updated with more function and robust interaction with the scope.
 
 Spectrum Analyzer for the Rigol DS1000 series digital scopes    
   
