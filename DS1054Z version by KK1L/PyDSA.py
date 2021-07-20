@@ -58,6 +58,11 @@ DBdivlist = [1, 2, 3, 5, 10, 20] # dB per division
 DBdivindex = 5              # 20 dB/div as initial value
 
 DBlevel = 0                 # Reference level
+CalibFactor = 7.4           # Trial and error value using 1MHz 632mVp-p for 0dBm and 2.00Vp-p for 10dBm.
+PeakValuedBm = -9999.0      # Peak determined during operation.
+PeakFrequency = 0
+MinValuedBm =   9999.0      # Min determined during operation.
+BestdBdivIndex = 5          # Initial best value for autoscale
 
 LONGfftsize = 262144        # FFT to do on long buffer. larger FFT takes more time ROSSI - No longer used.
 fftsamples = 16384           # size of FFT we are using - ROSSI - irrelevant now. Calculated from data read.
@@ -84,7 +89,7 @@ Buttonwidth2 = 8
 
 
 # Initialisation of general variables
-STARTfrequency = 0.0        # Startfrequency
+STARTfrequency = 1000000.0     # Startfrequency
 STOPfrequency = 30000000.0     # Stopfrequency
 
 SNenabled= False            # If Signal to Noise is enabled in the software
@@ -205,6 +210,37 @@ def BAveragemode():
     if TRACEaverage < 1:
         TRACEaverage = 1
     UpdateScreen()          # Always Update
+
+def BCalibration():
+    global CalibFactor
+
+    s = askfloat("Calibration Factor", "Value: " + str(CalibFactor) + "x\n\nNew value:\n(1-n)")
+
+    if (s == None):         # If Cancel pressed, then None
+        return()
+
+    #try:                    # Error if for example no numeric characters or OK pressed without input (s = "")
+    #    v = int(s)
+    #except:
+    #    s = "error"
+
+    #if s != "error":
+    CalibFactor = s
+
+    if CalibFactor < 0.1:
+        CalibFactor = 1
+    UpdateScreen()          # Always Update
+
+def BAutoScale():
+    global DBlevel
+    global DBdivindex
+    if PeakValuedBm > -9999: #check to see if waveform is already acquired (requirement for this to work)
+        BestdBLevel = -1000 #use a low value divisible by all possible db/div settings (1, 2, 5, 10, 20)
+        while int(PeakValuedBm) > BestdBLevel:
+            BestdBLevel = BestdBLevel + DBdivlist[BestdBdivIndex]
+        DBdivindex = BestdBdivIndex
+        DBlevel = BestdBLevel
+        UpdateTrace()          # MakeTrace() & UpdateScreen()
 
 
 def BFFTwindow():
@@ -532,7 +568,35 @@ def BDBdiv2():
     if RUNstatus == 0:      # Update if stopped
         UpdateTrace()
 
+def SetTrackingGen():
+    global X0L          # Left top X value
+    global Y0T          # Left top Y value
+    global GRW          # Screenwidth
+    global GRH          # Screenheight
+    global SIGNAL1
+    global RUNstatus
+    global SWEEPsingle
+    global SAMPLErate
+    global SAMPLEsize
+    global UPDATEspeed
+    global STARTfrequency
+    global STOPfrequency
+    global COLORred
+    global COLORcanvas
+    global COLORyellow
+    global COLORgreen
+    global COLORmagenta
 
+    ZerodBmm = 0.632        #Volts for 0dBm
+    TrackingIncrement = 1   #frequency step in kHz
+    #scope.write(":SOUR1:FUNC:SIN")          #set generator to sinusoid for sweeping
+    #scope.write(":SOUR1:VOLT ", ZerodBm)
+    #scope.write(":SOUR1:FREQ:", STARTfrequency)
+    scope.write(":SOUR1:MOD 0")             #turn off modulation
+    scope.write(":SOUR1:OUTP:IMP OMEG")     #high impedance mode
+    scope.write("SOUR1:APPL:SIN ", STARTfrequency, ",", ZerodBmm)
+    scope.write(":SOUR1:OUTP ON")           #turn sourcen
+    
 
 
 # ============================================ Main routine ====================================================
@@ -666,6 +730,20 @@ def Sweep():   # Read samples and store the data into the arrays
                         dummyvariable = 1/0 #throw an error to exit to "except:"
                 #this grabs an array of bytes
                 #if larger than 250,000 then need to break up reads
+                scope.write(":WAV:MODE NORM")
+                scope.write(":WAV:FORM ASC")                
+                wave_parms = []
+                wave_parms.extend(scope.query_ascii_values(":WAV:PRE?"))
+                Wave_Format = wave_parms.pop(0)
+                Wave_Type = wave_parms.pop(0)
+                Wave_Points = wave_parms.pop(0)
+                Wave_Count = wave_parms.pop(0)
+                Wave_XInc = wave_parms.pop(0)
+                Wave_XOrig = wave_parms.pop(0)
+                Wave_XRef = wave_parms.pop(0)
+                Wave_YInc = wave_parms.pop(0)
+                Wave_YOrig = wave_parms.pop(0)
+                Wave_YRef = wave_parms.pop(0)
                 scope.write(":WAV:MODE RAW")
                 scope.write(":WAV:FORM BYTE")
                 if data_length < 250000:
@@ -677,13 +755,23 @@ def Sweep():   # Read samples and store the data into the arrays
                 signals = []
                 data_size = len(signals)
                 #print ( 'Cleared data size = ', data_size)
+                #get waveform parameters
+
+                T1 = time.time() 
                 while reads < NumReads:
                     start_read = read_length * reads + 1 
                     stop_read = start_read + read_length - 1
                     scope.write(":WAV:STAR " + str(start_read))
                     scope.write(":WAV:STOP " + str(stop_read))
                     #print("data length:", data_length,"start:", start_read, "stop:",stop_read, "read length:",read_length)
-                    signals.extend(scope.query_binary_values(":WAV:DATA?", datatype='s', data_points=read_length))
+                    #signals.extend(scope.query_binary_values(":WAV:DATA?", datatype='s', data_points=read_length))
+                    #option "is_big_endian"=True/False default is FALSE to reverse order of data if needed
+                    #chunk_size matching data_length speeds reads by 33% for long data
+                    signals.extend(scope.query_binary_values(":WAV:DATA?", datatype='s', chunk_size=read_length, is_big_endian=False))
+                    #for count in "0,1,2,3,4,5,6,7,8,9,10":
+                    #    header = signals.pop(0) #discard the 11 bytes of header before the wave data
+                    #No need! the VIVisa function accounts for an ieee header in the data transfer
+                    #print ("current data length=",len(signals))
                     reads = reads + 1
                     x = X0L+275
                     y = Y0T+GRH+48
@@ -693,21 +781,39 @@ def Sweep():   # Read samples and store the data into the arrays
                     IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="read_status")
                     root.update()       # update screen                
                 data_size = len(signals)
+                T2 = time.time()
+                #print("Data read time: ",T2 - T1, "s")
                 #print( 'Final data size = ', data_size)
                 IDtxt  = ca.delete ("read_status")
                 root.update()       # update screen  
-                #print ( 'signals = ', signals )
 
-                # convert data from (inverted) bytes to an array of scaled floats
-                # this magic from Matthew Mets
-                SIGNAL1 = array.array('i', signals)
-                #SIGNAL1 = numpy.frombuffer(signals, dtype=)
-                #print (SIGNAL1)
-                SIGNAL1 = numpy.multiply(SIGNAL1, -1) #invert with below
-                SIGNAL1 = numpy.add(SIGNAL1, 255) #invert with above
-                #SIGNAL1 = numpy.subtract(SIGNAL1, 130) #shift down 50%
-                SIGNAL1 = numpy.divide(SIGNAL1,127.0) #normalize and make float
-                #print (SIGNAL1)
+                #check for min/max readings to indicate clipping
+                max_reading = 0
+                min_reading = 255
+                reads = 0
+                while reads < data_size:
+                    if signals[reads] > max_reading:
+                        max_reading = signals[reads]
+                    if signals[reads] < min_reading:
+                        min_reading = signals[reads]
+                    reads = reads + 1
+                if min_reading == 0 or max_reading == 255:
+                    txt = "!!CLIPPING DETECTED!!"
+                    IDtxt  = ca.create_text (x, y, text=txt, anchor=W, fill=COLORred, tag="clipping_status")
+                    root.update()       # update screen
+                    sleep(5)
+                    IDtxt  = ca.delete ("clipping_status")
+                    root.update()       # update screen      
+                
+                SIGNAL1 = signals
+                #Use the YOrigin, YReference, and YIncrement data to convert to volts
+                # (Data - YOrig - YRef) * Yinc
+                SIGNAL1 = numpy.subtract(SIGNAL1, Wave_YOrig)
+                SIGNAL1 = numpy.subtract(SIGNAL1, Wave_YRef)
+                SIGNAL1 = numpy.multiply(SIGNAL1, Wave_YInc)
+                SIGNAL1 = numpy.multiply(SIGNAL1, CalibFactor) #adjust so dBm values are correct
+                #print (signals[0],signals[1],signals[2],signals[3])
+                #print (SIGNAL1[0],SIGNAL1[1],SIGNAL1[2],SIGNAL1[3])
 
                 UpdateAll()  # Update Data, trace and screen
 
@@ -779,7 +885,7 @@ def DoFFT():            # Fast Fourier transformation
     IMX = []
 
 
-    #scale fftsamples to scope sample size
+    #scale fftsamples
     fftexponent = 0
     data_size = len(SIGNAL1)
     for fftexponent in range(13,24):
@@ -800,7 +906,7 @@ def DoFFT():            # Fast Fourier transformation
 
         v=SIGNAL1[n]
         # Check for overload
-        va = abs(v)                         # Check for too high input level
+        va = abs(v)                         # Check for peak input level
         #print v
         if va > SIGNALlevel:
             SIGNALlevel = va
@@ -884,7 +990,8 @@ def DoFFT():            # Fast Fourier transformation
     while (n <= fftsamples / 2):
         # For relative to voltage: v = math.sqrt(REX[n] * REX[n] + IMX[n] * IMX[n])    # Calculate absolute value from re and im
         v = REX[n] * REX[n] + IMX[n] * IMX[n]               # Calculate absolute value from re and im relative to POWER!
-        v = v * Totalcorr                                   # Make level independent of samples and convert to display range
+
+        v = v * Totalcorr                    # Make level independent of samples and convert to display range
 
         if TRACEmode == 1:                                  # Normal mode, do not change v
             FFTresult.append(v)    # Append the value to the FFTresult array
@@ -920,6 +1027,7 @@ def DoFFT():            # Fast Fourier transformation
     #print("FFT smoothing time: ",T2 - T1, "s") # For time measurement of FFT routine
 
 
+
 def MakeTrace():        # Update the grid and trace
     global FFTresult
     global T1line
@@ -945,6 +1053,10 @@ def MakeTrace():        # Update the grid and trace
     global DBdivindex   # Index value
     global DBlevel      # Reference level
     global SAMPLErate
+    global PeakValuedBm
+    global MinValuedBm
+    global BestdBdivIndex
+    global PeakFrequency
 
 
     # Set the TRACEsize variable
@@ -970,6 +1082,8 @@ def MakeTrace():        # Update the grid and trace
     n = 0
     Slevel = 0.0            # Signal level
     Nlevel = 0.0            # Noise level
+    PeakValuedBm = -9999.0
+    MinValuedBm = 9999.0
     while n < TRACEsize:
         F = n * Fsample
 
@@ -977,7 +1091,15 @@ def MakeTrace():        # Update the grid and trace
             x = X0L + (F - STARTfrequency)  / Fpixel
             T1line.append(int(x + 0.5))
             try:
-                y =  Yc - Yconv * 10 * math.log10(float(FFTresult[n]))  # Convert power to DBs, except for log(0) error
+                ydB =  10 * math.log10(float(FFTresult[n]))  # Convert power to DBs, except for log(0) error
+                y =  Yc - Yconv * ydB  # Convert to screen location
+                # Find peak 
+                #Ya = abs(y)
+                if ydB > PeakValuedBm:
+                    PeakValuedBm = ydB
+                    PeakFrequency = F 
+                if ydB < MinValuedBm:
+                    MinValuedBm = ydB                    
             except:
                 y = Ymax
 
@@ -987,13 +1109,22 @@ def MakeTrace():        # Update the grid and trace
                 y = Ymax
             T1line.append(int(y + 0.5))
 
-            if SNenabled == True and (F < STARTsignalfreq or F > STOPsignalfreq):               # Add to noise if outside signal band
-                Nlevel = Nlevel + float(FFTresult[n])
-
-        if SNenabled == True and (F >= STARTsignalfreq and F <= STOPsignalfreq):                # Add to signal if inside signal band
-            Slevel = Slevel + float(FFTresult[n])
+            if SNenabled == True:         
+                Slevel = Slevel + float(FFTresult[n]) # Add to signal if inside signal band
         #print("FPixel: ", Fpixel,"FSample:", Fsample, "X: ", x, "Y: ",y)
         n = n + 1
+            
+        if SNenabled == True and (F < STARTsignalfreq or F > STOPsignalfreq):   # Add to noise if outside signal band
+            Nlevel = Nlevel + float(FFTresult[n])
+
+    SignaldBRange = PeakValuedBm - MinValuedBm #Signal range to use for autoscale
+    SignaldBDiv = SignaldBRange / Vdiv
+    for dBdivIndex in range(1,len(DBdivlist)):
+        if SignaldBDiv <= DBdivlist[dBdivIndex]:
+            BestdBdivIndex = dBdivIndex
+            break #found right value so exit for
+
+    #print ("Range:", SignaldBRange, " Best Div:", BestdBDiv)
 
     try:
         SNresult = 10 * math.log10(Slevel / Nlevel)
@@ -1065,6 +1196,8 @@ def MakeScreen():       # Update the screen with traces and text
     global COLORaudiomax
     global CANVASwidth
     global CANVASheight
+    global PeakValuedBm
+    global PeakFrequency
 
 
     # Delete all items on the screen
@@ -1150,11 +1283,15 @@ def MakeScreen():       # Update the screen with traces and text
     y = 12
     idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext)
 
+    if PeakValuedBm > -9999:
+        x = X0L + 550
+        txt = "Peak = " + str("{:.2f}".format(PeakValuedBm)) + " dBm @" + str("{:.3f}".format(PeakFrequency/1e6)) + "MHz"
+        idTXT = ca.create_text (x, y, text=txt, anchor=W, fill=COLORtext, tag="peakdB_status")
 
     # Start and stop frequency and dB/div and trace mode
     txt = str(STARTfrequency/1000000) + " to " + str(STOPfrequency/1000000) + " MHz"
-    txt = txt +  "    " + str(DBdivlist[DBdivindex]) + " dB/div"
-    txt = txt + "    Level: " + str(DBlevel) + " dB "
+    txt = txt +  "    " + str(DBdivlist[DBdivindex]) + " dBm/div"
+    txt = txt + "    Level: " + str(DBlevel) + " dBm "
 
     if TRACEmode == 1:
         txt = txt + "    Normal mode "
@@ -1221,7 +1358,7 @@ def MakeScreen():       # Update the screen with traces and text
     cursorx = (STARTfrequency + (root.winfo_pointerx()-root.winfo_rootx()-X0L-4) * (STOPfrequency-STARTfrequency)/GRW) /1000000
     cursory = DBlevel - (root.winfo_pointery()-root.winfo_rooty()-Y0T-50) * Vdiv*DBdivlist[DBdivindex] /GRH
 
-    txt = "Cursor " + str(cursorx)  + " MHz   " + str(cursory) + " dB"
+    txt = "Cursor " + str(cursorx)  + " MHz   " + str(cursory) + " dBm"
 
     x = X0L+800
     y = 12
@@ -1299,6 +1436,12 @@ b = Button(frame1, text="FFTwindow", width=Buttonwidth1, command=BFFTwindow)
 b.pack(side=LEFT, padx=5, pady=5)
 
 b = Button(frame1, text="Store trace", width=Buttonwidth1, command=BSTOREtrace)
+b.pack(side=RIGHT, padx=5, pady=5)
+
+b = Button(frame1, text="Calibration", width=Buttonwidth1, command=BCalibration)
+b.pack(side=RIGHT, padx=5, pady=5)
+
+b = Button(frame1, text="AutoScale", width=Buttonwidth1, command=BAutoScale)
 b.pack(side=RIGHT, padx=5, pady=5)
 
 
