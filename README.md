@@ -1,5 +1,10 @@
 Updated version using Python 3.9 and latest PyVisa and NumPy
 The code is updated with more function and robust interaction with the scope.
+To use you should update to latest pyvisa (py -m pip install pyvisa)
+Insall latest numpy in same manner
+Download PyDSA from the repo and off you go!
+
+What follows is from the original README.md
 
 Spectrum Analyzer for the Rigol DS1000 series digital scopes    
   
