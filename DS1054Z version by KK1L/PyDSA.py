@@ -13,9 +13,8 @@
 # significantly updated how to wait for waveform to be acquired and display
 #
 # Jul 16 2021 KK1L
-#   Added Clear button to remove the waveforms
-#   Added toggle button to choose channel 1 or 2 from scope
-#   Got the averaging function working and made it do a running average across N bins with no (minimal) execution time hit
+#   Added Clear button to remove the waveforms and reset averaging/max-hold
+#   Added toggle button to choose channel 1 or 2
 #   On screen progress feedback for scope read, FFT, and display
 #   Warning trap when scope not triggered
 #   Added peak detect
@@ -23,7 +22,9 @@
 #   Put averaging back to accumulate mode
 #   Autoscale works with all displayed waveforms
 #   Changing divisions or shifting works with all displayed waveforms
-#   Allow up to 8 stored waveforms
+#   Allow up to 7 stored waveforms
+#   Calibration option
+#   Scale is in dBm and is accurate when calibrated with known magnitude sine
 #
 import math
 import time
