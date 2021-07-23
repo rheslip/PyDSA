@@ -8,6 +8,24 @@ Install latest numpy in same manner
 
 Download PyDSA from the repo and off you go!
 
+*Changelog Rossi, KK1L January & July 2021
+- Python 3.9 update...syntax, call format changes, functions
+- More robust scope communication
+- On screen progress feedback
+- Warning if scope is not triggered (used to crash)
+- Warning if input signal is clipping at scope
+- Can read from channel 1 or channel 2
+- Peak detect information and marker on waveform
+- Added autoscaling
+- Scaling change and offset works for all waves on the screen
+- Can store up to 7 waveforms on the screen
+- Most actions can be done while acqcuiring
+- Scale is accurate in dBm after calibration
+    *Previously the absolute level was arbitrary, but relatively accurate
+    *"Calibrate" is manual operation to adjust peak for a known dBm value
+    *Use a sine wave of known magnitude and adjust the calibration factor for the right reading
+    Note: It is on my list to make this automatic.
+
 
 
 <br><br>What follows is from the original README.md
