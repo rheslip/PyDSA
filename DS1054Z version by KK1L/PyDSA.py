@@ -186,9 +186,20 @@ def BNormalmode():
 def BMaxholdmode():
     global TRACEmode
     global TRACEreset
-
+    global RUNstatus
+    global PrimaryTrace
+    global StoredTraces
+    global STOREtrace
+    global CurrentStoredTrace
+    global PeakValuedBm
+    global FFTresult
+    
     TRACEreset = True       # Reset trace peak and trace average
     TRACEmode = 2
+    #Would use code below to reset the hold accumulation
+    PrimaryTrace = []
+    PeakValuedBm = -9999.0
+    ca.delete("peak_marker")    
     UpdateScreen()          # Always Update
 
 
@@ -197,6 +208,12 @@ def BAveragemode():
     global TRACEaverage
     global TRACEreset
     global RUNstatus
+    global PrimaryTrace
+    global StoredTraces
+    global STOREtrace
+    global CurrentStoredTrace
+    global PeakValuedBm
+    global FFTresult
 
     #if (RUNstatus != 0):
     #    showwarning("WARNING","Stop sweep first")
@@ -209,17 +226,19 @@ def BAveragemode():
 
     if ((s == None) or (s == " ")):         # If Cancel pressed, then None
         return()
-
     try:                    # Error if for example no numeric characters)
         v = int(s)
     except:
         s = "error"
-
     if s != "error":
         TRACEaverage = v
-
     if TRACEaverage < 1:
         TRACEaverage = 1
+    #Would use code below to reset the averaging
+    PrimaryTrace = []
+    PeakValuedBm = -9999.0
+    ca.delete("peak_marker")    
+    
     UpdateScreen()          # Always Update
 
 def BCalibration():

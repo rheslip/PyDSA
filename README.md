@@ -19,7 +19,7 @@ Download PyDSA from the repo and off you go!
 - Added autoscaling
 - Scaling change and offset works for all waves on the screen
 - Can store up to 7 waveforms on the screen
-- Most actions can be done while acqcuiring
+- Most actions can be done while acquiring
 - Added clear function which removes all waves and resets averaging/max-hold
 - Scale is accurate in dBm after calibration
     *Previously the absolute level was arbitrary, but relatively accurate
