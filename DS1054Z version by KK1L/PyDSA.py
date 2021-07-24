@@ -32,6 +32,7 @@ import numpy
 #import tkinter
 import tkinter.font as tkfont
 import sys
+from numpy.lib.twodim_base import _trilu_dispatcher
 import pyvisa as visa
 from time import sleep
 from tkinter import *
@@ -72,6 +73,7 @@ MinValuedBm =   9999.0      # Min determined during operation.
 BestdBdivIndex = 5          # Initial best value for autoscale
 ASPeakValuedBm  = -9999.0   # AutoScale peak tracks the peak across all waves including stored
 ASMinValuedBm = 9999.0      # AutoScale min track the peak across all waves including stored
+AutoCal = False
 
 LONGfftsize = 262144        # FFT to do on long buffer. larger FFT takes more time ROSSI - No longer used.
 fftsamples = 16384           # size of FFT we are using - ROSSI - irrelevant now. Calculated from data read.
@@ -193,7 +195,7 @@ def BMaxholdmode():
     global CurrentStoredTrace
     global PeakValuedBm
     global FFTresult
-    
+
     TRACEreset = True       # Reset trace peak and trace average
     TRACEmode = 2
     #Would use code below to reset the hold accumulation
@@ -243,23 +245,37 @@ def BAveragemode():
 
 def BCalibration():
     global CalibFactor
+    global CalibStep
+    global TRACEmode
+    global TRACEaverage
+    global TRACEreset
+    global PrimaryTrace
+    global StoredTraces
+    global STOREtrace
+    global CurrentStoredTrace
+    global ASPeakValuedBm
+    global FFTresult
+    global RUNstatus
+    global SWEEPsingle
+    global AutoCal
+    global dBmTarget
 
-    s = askfloat("Calibration Factor", "Value: " + str(CalibFactor) + "x\n\nNew value:\n(1-n)")
+    dBmTarget = 0 #assume 0dBm (632mVp-p) target unless updated
+    s = askfloat("Enter dBm target", "Sample a sine wave of known \nvalue to calibrate. \n\nEnter the amplitude in dBm:")
 
     if (s == None):         # If Cancel pressed, then None
         return()
 
-    #try:                    # Error if for example no numeric characters or OK pressed without input (s = "")
-    #    v = int(s)
-    #except:
-    #    s = "error"
+    dBmTarget = s
+    #Sample wave to accumulate 10 averages then set peak reading to dBmTarget value (within 0.05dBm)
+    #TRACEmode = 3 # set average mode
+    #TRACEaverage = 10 # set average to 10
 
-    #if s != "error":
-    CalibFactor = s
-
-    if CalibFactor < 0.1:
-        CalibFactor = 1
-    UpdateScreen()          # Always Update
+    AutoCal = True
+    RUNstatus = 2
+    CalibFactor = 1 
+    CalibStep = 9999 #set for first time through
+    SWEEPsingle = True
 
 def BAutoScale():
     global DBlevel
@@ -779,11 +795,45 @@ def Sweep():   # Read samples and store the data into the arrays
     global COLORgreen
     global COLORmagenta
     global ColorStoredTrace
+    global AutoCal
+    global CalibFactor
+    global CalibStep
+    global dBmTarget
 
     while (True):                                           # Main loop
 
-        #print("Runstatus: ", RUNstatus)
-        # RUNstatus = 1 : Open Stream
+        #Calibration pressed
+        if AutoCal == True:
+            if CalibStep == 9999: #in first time through
+                RUNstatus = 1
+                CalibStep = 10
+                IsHigh = False #pick one...need to something to start
+                WasHigh = False #pick one...need to something to start                
+            else:
+                PeakDelta = ASPeakValuedBm - dBmTarget                                                 
+                if abs(PeakDelta) > 0.05: #binary search??    
+                    if PeakDelta > 0:
+                        IsHigh = True
+                        if IsHigh != WasHigh:
+                            CalibStep = CalibStep / 2                          
+                        CalibFactor = CalibFactor - CalibStep
+                        WasHigh = True
+                    else:
+                        IsHigh = False
+                        if IsHigh != WasHigh:
+                            CalibStep = CalibStep / 2                        
+                        CalibFactor = CalibFactor + CalibStep
+                        WasHigh = False
+                    RUNstatus = 2
+                else:
+                    RUNstatus = 0
+                    AutoCal = False #All done!
+                    x = X0L+275
+                    y = Y0T+GRH+32                   
+                    ca.create_text (x, y, text="Autocalibration complete!", anchor=W, fill=COLORgreen, tag="AutoCal_status")
+                    root.update()
+                    #UpdateScreen() 
+        
         if (RUNstatus == 1):
             if UPDATEspeed < 1:
                 UPDATEspeed = 1.0
@@ -808,7 +858,7 @@ def Sweep():   # Read samples and store the data into the arrays
                 #print ( 'TCPIP variable = ', VXI )
                 #scope = visa.instrument(VXI[0], timeout=200, chunk_size=1024000) # bigger timeout for long mem
                 scope = rm.open_resource( instruments[0] )
-                RUNstatus = 2
+                RUNstatus = 2 #acquire wave next
             except:
                 RUNstatus = 0
                 showerror("VISA Error","Cannot open scope")
@@ -838,6 +888,7 @@ def Sweep():   # Read samples and store the data into the arrays
                 txt = "->Acquiring wave from scope"
                 x = X0L + 275
                 y = Y0T+GRH+32
+                ca.delete("AutoCal_status")
                 ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="aquire_status")
                 root.update()       # update screen
 
@@ -990,9 +1041,10 @@ def Sweep():   # Read samples and store the data into the arrays
                 UpdateScreen()          # UpdateScreen() call
         except:
             pass #way to "clean" exit when there is some scope issue
+
         # Update tquerys and screens by TKinter
         root.update_idletasks()
-        root.update()                                       # update screens
+        root.update()  # read buttons, update screens, do stuff
 
 
 def UpdateAll():        # Update Data, trace and screen
