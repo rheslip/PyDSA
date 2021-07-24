@@ -26,6 +26,7 @@ Download PyDSA from the repo and off you go!
     *"Calibrate" is manual operation to adjust peak for a known dBm value
     *Use a sine wave of known magnitude and adjust the calibration factor for the right reading
     Note: It is on my list to make this automatic.
+- Added autocalibration. Use a known amplitude sine wave and autocal will match to the dBm you enter
 
 
 
