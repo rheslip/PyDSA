@@ -66,7 +66,7 @@ DBdivlist = [1, 2, 3, 5, 10, 20] # dB per division
 DBdivindex = 5              # 20 dB/div as initial value
 
 DBlevel = 0                 # Reference level
-CalibFactor = 7.52           # Trial and error value using 1MHz 632mVp-p for 0dBm and 2.00Vp-p for 10dBm.
+CalibFactor = 7.72          # Trial and error value using 1MHz 632mVp-p for 0dBm and 2.00Vp-p for 10dBm.
 PeakValuedBm = -9999.0      # Peak determined during operation.
 PeakFrequency = 0
 MinValuedBm =   9999.0      # Min determined during operation.
@@ -826,7 +826,7 @@ def Sweep():   # Read samples and store the data into the arrays
                         if (IsHigh and not WasHigh) or (not IsHigh and WasHigh): # went past the target, so slow down approach
                             CalibStep = CalibStep / 2                    
                     if PeakDelta > 0:
-                        while CalibFactor <= CalibStep:
+                        while CalibStep >= CalibFactor:
                             CalibStep = CalibStep / 2
                         CalibFactor = CalibFactor - CalibStep
                     else:                     
@@ -836,9 +836,10 @@ def Sweep():   # Read samples and store the data into the arrays
                 else:
                     RUNstatus = 0
                     AutoCal = False #All done!
-                    x = X0L+275
-                    y = Y0T+GRH+32                   
-                    ca.create_text (x, y, text="Autocalibration complete!", anchor=W, fill=COLORgreen, tag="AutoCal_status")
+                    x = X0L+265
+                    y = Y0T+GRH+32
+                    txt = "Autocalibration complete! Factor = " + str("{:.2f}".format(CalibFactor))
+                    ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="AutoCal_status")
                     root.update()
                     #UpdateScreen() 
         
