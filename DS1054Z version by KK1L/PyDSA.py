@@ -66,7 +66,7 @@ DBdivlist = [1, 2, 3, 5, 10, 20] # dB per division
 DBdivindex = 5              # 20 dB/div as initial value
 
 DBlevel = 0                 # Reference level
-CalibFactor = 7.4           # Trial and error value using 1MHz 632mVp-p for 0dBm and 2.00Vp-p for 10dBm.
+CalibFactor = 7.52           # Trial and error value using 1MHz 632mVp-p for 0dBm and 2.00Vp-p for 10dBm.
 PeakValuedBm = -9999.0      # Peak determined during operation.
 PeakFrequency = 0
 MinValuedBm =   9999.0      # Min determined during operation.
@@ -799,6 +799,8 @@ def Sweep():   # Read samples and store the data into the arrays
     global CalibFactor
     global CalibStep
     global dBmTarget
+    global PeakDelta
+    global OldPeakDelta
 
     while (True):                                           # Main loop
 
@@ -807,23 +809,29 @@ def Sweep():   # Read samples and store the data into the arrays
             if CalibStep == 9999: #in first time through
                 RUNstatus = 1
                 CalibStep = 10
-                IsHigh = False #pick one...need to something to start
-                WasHigh = False #pick one...need to something to start                
+                PeakDelta = 9999.0              
             else:
-                PeakDelta = ASPeakValuedBm - dBmTarget                                                 
+                OldPeakDelta = PeakDelta
+                PeakDelta = ASPeakValuedBm - dBmTarget 
+                if PeakDelta > 0:
+                    IsHigh = True
+                else:
+                    IsHigh = False
                 if abs(PeakDelta) > 0.05: #binary search??    
+                    if OldPeakDelta != 9999.0: #not first time through
+                        if OldPeakDelta > 0:
+                            WasHigh = True
+                        else:
+                            WasHigh = False
+                        if (IsHigh and not WasHigh) or (not IsHigh and WasHigh): # went past the target, so slow down approach
+                            CalibStep = CalibStep / 2                    
                     if PeakDelta > 0:
-                        IsHigh = True
-                        if IsHigh != WasHigh:
-                            CalibStep = CalibStep / 2                          
+                        while CalibFactor <= CalibStep:
+                            CalibStep = CalibStep / 2
                         CalibFactor = CalibFactor - CalibStep
-                        WasHigh = True
-                    else:
-                        IsHigh = False
-                        if IsHigh != WasHigh:
-                            CalibStep = CalibStep / 2                        
+                    else:                     
                         CalibFactor = CalibFactor + CalibStep
-                        WasHigh = False
+
                     RUNstatus = 2
                 else:
                     RUNstatus = 0
