@@ -262,20 +262,16 @@ def BCalibration():
 
     dBmTarget = 0 #assume 0dBm (632mVp-p) target unless updated
     s = askfloat("Enter dBm target", "Sample a sine wave of known \nvalue to calibrate. \n\nEnter the amplitude in dBm:")
-
     if (s == None):         # If Cancel pressed, then None
         return()
-
     dBmTarget = s
-    #Sample wave to accumulate 10 averages then set peak reading to dBmTarget value (within 0.05dBm)
-    #TRACEmode = 3 # set average mode
-    #TRACEaverage = 10 # set average to 10
 
     AutoCal = True
     RUNstatus = 2
     CalibFactor = 1 
     CalibStep = 9999 #set for first time through
     SWEEPsingle = True
+    TRACEmode = 1 #normal mode...not set up to work any other way currently.
 
 def BAutoScale():
     global DBlevel
@@ -291,7 +287,7 @@ def BAutoScale():
         # already calculated best dB per div. Now need to find what to shift the top of screen value to.
         BestdBLevel = -1000 #use a low value divisible by all possible db/div settings (1, 2, 5, 10, 20)
         while int(ASPeakValuedBm) > BestdBLevel:
-            BestdBLevel = BestdBLevel + DBdivlist[BestdBdivIndex]
+            BestdBLevel += DBdivlist[BestdBdivIndex]
         DBdivindex = BestdBdivIndex
         DBlevel = BestdBLevel
     #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
@@ -301,7 +297,7 @@ def BAutoScale():
             FFTresult = StoredFFT[Index].copy()
             MakeTrace() #makes PrimaryTrace from FFTresult
             StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
-            Index = Index + 1
+            Index += 1
     FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
     UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
 
@@ -309,7 +305,7 @@ def BFFTwindow():
     global FFTwindow
     global TRACEreset
 
-    FFTwindow = FFTwindow + 1
+    FFTwindow += 1
     if FFTwindow > 6:
         FFTwindow = 0
     TRACEreset = True    # Reset trace peak and trace average
@@ -352,7 +348,7 @@ def BSTOREtrace():
     CST_OnEntry = CurrentStoredTrace
     try:
         if CurrentStoredTrace >= -1 and CurrentStoredTrace < 5:
-            CurrentStoredTrace = CurrentStoredTrace + 1
+            CurrentStoredTrace += 1
             StoredTraces[CurrentStoredTrace] = PrimaryTrace.copy()
             StoredFFT[CurrentStoredTrace] = FFTresult.copy()
             STOREtrace = True
@@ -429,7 +425,7 @@ def BSNfreq2():
     if SNmeasurement == False:      # Only if SN measurement is running
         return()
 
-    CENTERsignalfreq = CENTERsignalfreq + SNfreqstep
+    CENTERsignalfreq += SNfreqstep
     if CENTERsignalfreq > 1e6:
         CENTERsignalfreq = 1e6
 
@@ -483,7 +479,7 @@ def Blevel1():
     global StoredTraces    
     # Save the "live" wave
     TempPrimaryFFT = FFTresult.copy()
-    DBlevel = DBlevel - 1
+    DBlevel -= 1
     #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
     Index = 0
     if CurrentStoredTrace != -1:
@@ -491,7 +487,7 @@ def Blevel1():
             FFTresult = StoredFFT[Index].copy()
             MakeTrace() #makes PrimaryTrace from FFTresult
             StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
-            Index = Index + 1
+            Index += 1
     FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
     UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
     
@@ -507,7 +503,7 @@ def Blevel2():
     global StoredTraces
     # Save the "live" wave
     TempPrimaryFFT = FFTresult.copy()
-    DBlevel = DBlevel + 1
+    DBlevel += 1
     #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
     Index = 0
     if CurrentStoredTrace != -1:
@@ -515,7 +511,7 @@ def Blevel2():
             FFTresult = StoredFFT[Index].copy()
             MakeTrace() #makes PrimaryTrace from FFTresult
             StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
-            Index = Index + 1
+            Index += 1
     FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
     UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
     
@@ -531,7 +527,7 @@ def Blevel3():
     global StoredTraces
     # Save the "live" wave
     TempPrimaryFFT = FFTresult.copy()
-    DBlevel = DBlevel - 10
+    DBlevel -= 10
     #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
     Index = 0
     if CurrentStoredTrace != -1:
@@ -539,7 +535,7 @@ def Blevel3():
             FFTresult = StoredFFT[Index].copy()
             MakeTrace() #makes PrimaryTrace from FFTresult
             StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
-            Index = Index + 1
+            Index += 1
     FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
     UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
 
@@ -555,7 +551,7 @@ def Blevel4():
     global StoredTraces
     # Save the "live" wave
     TempPrimaryFFT = FFTresult.copy()
-    DBlevel = DBlevel + 10
+    DBlevel += 10
     #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
     Index = 0
     if CurrentStoredTrace != -1:
@@ -563,7 +559,7 @@ def Blevel4():
             FFTresult = StoredFFT[Index].copy()
             MakeTrace() #makes PrimaryTrace from FFTresult
             StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
-            Index = Index + 1
+            Index += 1
     FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
     UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
 
@@ -704,7 +700,7 @@ def BDBdiv1():
     # Save the "live" wave
     TempPrimaryFFT = FFTresult.copy()    
     if (DBdivindex >= 1):
-        DBdivindex = DBdivindex - 1
+        DBdivindex -= 1
     #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
     Index = 0
     if CurrentStoredTrace != -1:
@@ -712,7 +708,7 @@ def BDBdiv1():
             FFTresult = StoredFFT[Index].copy()
             MakeTrace() #makes PrimaryTrace from FFTresult
             StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
-            Index = Index + 1
+            Index += 1
     FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
     UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
 
@@ -727,7 +723,7 @@ def BDBdiv2():
     # Save the "live" wave
     TempPrimaryFFT = FFTresult.copy()
     if (DBdivindex < len(DBdivlist) - 1):
-        DBdivindex = DBdivindex + 1
+        DBdivindex += 1
     #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
     Index = 0
     if CurrentStoredTrace != -1:
@@ -735,7 +731,7 @@ def BDBdiv2():
             FFTresult = StoredFFT[Index].copy()
             MakeTrace() #makes PrimaryTrace from FFTresult
             StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
-            Index = Index + 1
+            Index += 1
     FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
     UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
 
@@ -828,9 +824,9 @@ def Sweep():   # Read samples and store the data into the arrays
                     if PeakDelta > 0:
                         while CalibStep >= CalibFactor:
                             CalibStep = CalibStep / 2
-                        CalibFactor = CalibFactor - CalibStep
+                        CalibFactor -= CalibStep
                     else:                     
-                        CalibFactor = CalibFactor + CalibStep
+                        CalibFactor += CalibStep
 
                     RUNstatus = 2
                 else:
@@ -989,7 +985,7 @@ def Sweep():   # Read samples and store the data into the arrays
                     #    header = signals.pop(0) #discard the 11 bytes of header before the wave data
                     #No need! the VIVisa function accounts for an ieee header in the data transfer
                     #print ("current data length=",len(signals))
-                    reads = reads + 1
+                    reads += 1
                     x = X0L+275
                     y = Y0T+GRH+48
                     ca.delete ("read_status") #delete canvas object tag=read_status
@@ -1013,7 +1009,7 @@ def Sweep():   # Read samples and store the data into the arrays
                         max_reading = signals[reads]
                     if signals[reads] < min_reading:
                         min_reading = signals[reads]
-                    reads = reads + 1
+                    reads += 1
                 if min_reading == 0 or max_reading == 255:
                     txt = "!!CLIPPING DETECTED!!"
                     ca.create_text (x, y, text=txt, anchor=W, fill=COLORred, tag="clipping_status")
@@ -1110,7 +1106,7 @@ def DoFFT():            # Fast Fourier transformation
         fftsamples = 2**fftexponent
         if fftsamples*2 >= data_size: #check to see if one more take it above
             break
-        fftexponent = fftexponent + 1
+        fftexponent += 1
         #print("fftsamples: ", fftsamples)
     
     #print("Buffersize:" + str(len(SIGNAL1)) + " FFTsize: " + str(fftsamples))
@@ -1222,7 +1218,7 @@ def DoFFT():            # Fast Fourier transformation
             v = FFTmemory[n] + (v - FFTmemory[n]) / TRACEaverage
         
         FFTresult.append(v)    # Append the value to the FFTresult array
-        n = n + 1
+        n += 1
 
             ##a rolling average across TraceAverage values
             #i_fft = n
@@ -1336,10 +1332,10 @@ def MakeTrace():        # Update the grid and trace
             if SNenabled == True:         
                 Slevel = Slevel + float(FFTresult[n]) # Add to signal if inside signal band
         #print("FPixel: ", Fpixel,"FSample:", Fsample, "X: ", x, "Y: ",y)
-        n = n + 1
+        n += 1
             
         if SNenabled == True and (F < STARTsignalfreq or F > STOPsignalfreq):   # Add to noise if outside signal band
-            Nlevel = Nlevel + float(FFTresult[n])
+            Nlevel += float(FFTresult[n])
 
     # Calculate right values for autoscale of all waves
     if CurrentStoredTrace != -1: #a stored wave exists, so AS values are valid
@@ -1456,8 +1452,8 @@ def MakeScreen():       # Update the screen with traces and text
         ca.create_line(Dline, fill=COLORgrid)
         txt = str(db) # db labels
         ca.create_text (x3, y-5, text=txt, anchor=W, fill=COLORtext)
-        db = db - DBdivlist[DBdivindex]
-        i = i + 1
+        db -= DBdivlist[DBdivindex]
+        i += 1
 
 
     # Draw vertical grid lines
@@ -1474,7 +1470,7 @@ def MakeScreen():       # Update the screen with traces and text
         txt= txt + "M"
         ca.create_text (x-10, y2+10, text=txt, anchor=W, fill=COLORtext)
         freq=freq+freqstep
-        i = i + 1
+        i += 1
 
     # Draw traces
     if len(PrimaryTrace) > 4:                                     # Avoid writing lines with 1 coordinate
@@ -1484,7 +1480,7 @@ def MakeScreen():       # Update the screen with traces and text
     if CurrentStoredTrace != -1:
         while Index <= CurrentStoredTrace:
             ca.create_line(StoredTraces[Index], fill=ColorStoredTrace[Index])   # Write each stored trace
-            Index = Index + 1
+            Index += 1
 
     # Draw SIGNAL band lines
     if SNmeasurement == True:
@@ -1566,7 +1562,7 @@ def MakeScreen():       # Update the screen with traces and text
     txt = ""
     while(n < t and n < le):
         txt = txt + "|"
-        n = n + 1
+        n += 1
 
     x = X0L
     y = Y0T+GRH+32
