@@ -882,7 +882,7 @@ def Sweep():   # Read samples and store the data into the arrays
                     data_length = scope.query_ascii_values(':ACQ:MDEP?')[0]
                 except:
                     #if data_length == "AUTO":
-                    scope.write(":ACQ:MDEP 6000000")
+                    scope.write(":ACQ:MDEP 60000")
                 data_length = int(scope.query_ascii_values(':ACQ:MDEP?')[0])
                 #print('Data length from scope:', data_length, "Sample rate from scope:", SAMPLErate)
                 #print('Will sample with command:',":WAV:SOUR CHAN" + str(ChannelChoice))
