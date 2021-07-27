@@ -1015,7 +1015,7 @@ def Sweep():   # Read samples and store the data into the arrays
                     y = Y0T+GRH+48
                     ca.delete ("read_status") #delete canvas object tag=read_status
                     root.update()       # update screen     
-                    txt = "read " + str(stop_read) + " of " + str(data_length) + " bytes"
+                    txt = "read " + str("{0:,.0f}".format(stop_read)) + " of " + str("{0:,.0f}".format(data_length)) + " bytes"
                     ca.create_text (x, y, text=txt, anchor=W, fill=COLORgreen, tag="read_status")
                     root.update()       # update screen                
                 data_size = len(signals)
