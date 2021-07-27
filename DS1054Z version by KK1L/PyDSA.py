@@ -618,6 +618,10 @@ def BStartfrequency():
     global STARTfrequency
     global STOPfrequency
     global RUNstatus
+    global DBdivindex
+    global PrimaryTrace
+    global StoredTraces
+    global FFTresult
 
     # if (RUNstatus != 0):
     #    showwarning("WARNING","Stop sweep first")
@@ -638,9 +642,18 @@ def BStartfrequency():
 
     if STOPfrequency <= STARTfrequency:
         STOPfrequency = STARTfrequency + 1
-
-    if RUNstatus == 0:      # Update if stopped
-        UpdateTrace()
+    # Save the "live" wave
+    TempPrimaryFFT = FFTresult.copy()    
+    #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
+    Index = 0
+    if CurrentStoredTrace != -1:
+        while Index <= CurrentStoredTrace:
+            FFTresult = StoredFFT[Index].copy()
+            MakeTrace() #makes PrimaryTrace from FFTresult
+            StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
+            Index += 1
+    FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
+    UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
 
 def BClearTraces():
     global PrimaryTrace
@@ -663,7 +676,10 @@ def BStopfrequency():
     global STARTfrequency
     global STOPfrequency
     global RUNstatus
-
+    global DBdivindex
+    global PrimaryTrace
+    global StoredTraces
+    global FFTresult
     # if (RUNstatus != 0):
     #    showwarning("WARNING","Stop sweep first")
     #    return()
@@ -687,9 +703,18 @@ def BStopfrequency():
     if STARTfrequency >= STOPfrequency:
         STARTfrequency = STOPfrequency - 1
 
-    if RUNstatus == 0:      # Update if stopped
-        UpdateTrace()
-
+    # Save the "live" wave
+    TempPrimaryFFT = FFTresult.copy()    
+    #now recreate traces from the FFT data. Start with stored so the last Primary is the real Primary
+    Index = 0
+    if CurrentStoredTrace != -1:
+        while Index <= CurrentStoredTrace:
+            FFTresult = StoredFFT[Index].copy()
+            MakeTrace() #makes PrimaryTrace from FFTresult
+            StoredTraces[Index] = PrimaryTrace.copy() #store PrimaryTrace in correct StoredTraces
+            Index += 1
+    FFTresult = TempPrimaryFFT.copy() # scale and shift each stored FFT
+    UpdateTrace() #makes PrimaryTrace from FFTresult and then MakeScreen for all traces
 
 def BDBdiv1():
     global DBdivindex
