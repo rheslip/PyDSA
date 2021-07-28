@@ -253,7 +253,7 @@ def BCalibration():
     global StoredTraces
     global STOREtrace
     global CurrentStoredTrace
-    global ASPeakValuedBm
+    global PeakValuedBm
     global FFTresult
     global RUNstatus
     global SWEEPsingle
@@ -822,6 +822,7 @@ def Sweep():   # Read samples and store the data into the arrays
     global dBmTarget
     global PeakDelta
     global OldPeakDelta
+    global PeakValuedBm
 
     while (True):                                           # Main loop
 
@@ -833,7 +834,7 @@ def Sweep():   # Read samples and store the data into the arrays
                 PeakDelta = 9999.0              
             else:
                 OldPeakDelta = PeakDelta
-                PeakDelta = ASPeakValuedBm - dBmTarget 
+                PeakDelta = PeakValuedBm - dBmTarget #use PeakValuedBm for active wave (not ASPeak...since that includes stored waves)
                 if PeakDelta > 0:
                     IsHigh = True
                 else:
