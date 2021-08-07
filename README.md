@@ -1,3 +1,37 @@
+Updated version using Python 3.9 and latest PyVisa and NumPy
+
+The code is updated with more function and robust interaction with the scope.
+
+To use you should update to latest pyvisa (py -m pip install pyvisa)
+
+Install latest numpy in same manner
+
+Download PyDSA from the repo and off you go!
+
+*Changelog Rossi, KK1L January & July 2021
+- Python 3.9 update...syntax, call format changes, functions
+- More robust scope communication
+- On screen progress feedback
+- Warning if scope is not triggered (used to crash)
+- Warning if input signal is clipping at scope
+- Can read from channel 1 or channel 2
+- Peak detect information and marker on waveform
+- Added autoscaling
+- Scaling change and offset works for all waves on the screen
+- Can store up to 7 waveforms on the screen
+- Most actions can be done while acquiring
+- Added clear function which removes all waves and resets averaging/max-hold
+- Scale is accurate in dBm after calibration
+    *Previously the absolute level was arbitrary, but relatively accurate
+    *"Calibrate" is manual operation to adjust peak for a known dBm value
+    *Use a sine wave of known magnitude and adjust the calibration factor for the right reading
+    Note: It is on my list to make this automatic.
+- Added autocalibration. Use a known amplitude sine wave and autocal will match to the dBm you enter
+
+
+
+<br><br>What follows is from the original README.md
+
 Spectrum Analyzer for the Rigol DS1000 series digital scopes    
   
 RF Spectrum Analyzer in Python. This is a modified version of PA2OHH's audio spectrum analyzer:  
